@@ -2,7 +2,7 @@
    - 앱 파일을 미리 저장해 오프라인에서도 열려요.
    - 같은 사이트의 GET 요청만 처리해요. (Gemini 등 외부 요청은 건드리지 않아요)
    - 앱을 고칠 때는 VERSION 숫자를 올리면 새 파일이 적용돼요. */
-var VERSION = 'kdn-v1.1.0';
+var VERSION = 'kdn-v1.1.1';
 var CORE = [
   './',
   'index.html',

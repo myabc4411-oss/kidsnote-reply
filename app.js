@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-var APP_VERSION = '1.1.0';
+var APP_VERSION = '1.1.1';
 var DEFAULT_MODEL = 'gemini-3.8-flash';
 var $ = function(id){ return document.getElementById(id); };
 var state = { tone:'warm', len:'2', emoji:'1' };
@@ -476,7 +476,7 @@ $('genBtn').addEventListener('click', generate);
 $('againBtn').addEventListener('click', generate);
 
 /* =========================================================
-   클립보드 자동 불러오기
+   클립보드 붙여넣기 (버튼을 눌렀을 때만 읽어요. 자동으로 읽지 않아요)
    ========================================================= */
 function fromClipboard(auto){
   if(auto && cur==='settings') return;
@@ -491,15 +491,12 @@ function fromClipboard(auto){
     setLastClip(t);
     $('note').value = String(raw).trim();
     store('draft', $('note').value);
-    toast('복사한 알림장을 불러왔어요');
-    generate();
+    toast('붙여넣었어요. 아래 "답장 만들기"를 눌러 주세요');
   }).catch(function(){
     if(!auto) toast('클립보드를 읽을 수 없어요. 입력칸을 길게 눌러 붙여넣어 주세요');
   });
 }
 $('pasteBtn').addEventListener('click', function(){ fromClipboard(false); });
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') fromClipboard(true); });
-window.addEventListener('focus', function(){ fromClipboard(true); });
 
 /* =========================================================
    서비스 워커 (오프라인 / 설치)
@@ -532,7 +529,6 @@ if('serviceWorker' in navigator){
   $('verText').textContent = '알림장 답장 도우미 v' + APP_VERSION;
   show('home');
   updateInstallUI();
-  fromClipboard(true);
 })();
 
 })();
