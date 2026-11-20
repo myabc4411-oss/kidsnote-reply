@@ -1,10 +1,10 @@
 (function(){
 'use strict';
 
-var APP_VERSION = '1.0.0';
+var APP_VERSION = '1.1.0';
 var DEFAULT_MODEL = 'gemini-3.8-flash';
 var $ = function(id){ return document.getElementById(id); };
-var state = { tone:'warm', len:'2' };
+var state = { tone:'warm', len:'2', emoji:'1' };
 
 /* =========================================================
    저장소 (localStorage 실패해도 앱은 동작)
@@ -72,6 +72,7 @@ $('gearBtn').addEventListener('click', function(){ nav('settings'); });
 function syncChips(){
   [].forEach.call(document.querySelectorAll('#toneRow .chip'), function(b){ b.classList.toggle('on', b.dataset.v===state.tone); });
   [].forEach.call(document.querySelectorAll('#lenRow .chip'), function(b){ b.classList.toggle('on', b.dataset.v===state.len); });
+  [].forEach.call(document.querySelectorAll('#emojiRow .chip'), function(b){ b.classList.toggle('on', b.dataset.v===state.emoji); });
 }
 $('toneRow').addEventListener('click', function(e){
   var b = e.target.closest('.chip'); if(!b) return;
@@ -80,6 +81,10 @@ $('toneRow').addEventListener('click', function(e){
 $('lenRow').addEventListener('click', function(e){
   var b = e.target.closest('.chip'); if(!b) return;
   state.len = b.dataset.v; store('len', state.len); syncChips();
+});
+$('emojiRow').addEventListener('click', function(e){
+  var b = e.target.closest('.chip'); if(!b) return;
+  state.emoji = b.dataset.v; store('emoji', state.emoji); syncChips();
 });
 
 ['child','teacher','apikey','model'].forEach(function(id){
@@ -110,7 +115,7 @@ $('wipeBtn').addEventListener('click', function(){
   clearTimeout(wipeT); wipeArmed=false; $('wipeBtn').textContent='저장된 데이터 모두 지우기';
   wipeAll();
   ['child','teacher','apikey','model','note','memo'].forEach(function(id){ $(id).value=''; });
-  state.tone='warm'; state.len='2'; syncChips();
+  state.tone='warm'; state.len='2'; state.emoji='1'; syncChips();
   toast('저장된 데이터를 모두 지웠어요');
 });
 
@@ -246,9 +251,42 @@ function detectFood(text){
   return '';
 }
 
+/* 문장마다 핵심 단어 뒤에 이모지 붙이기 */
+var EMOJI_MAP = [
+  [/알림장/, '📒'], [/감사/, '🙏'], [/주말/, '🎉'],
+  [/점심|급식|식사|밥/, '🍚'], [/간식/, '🍪'], [/오징어/, '🦑'], [/불고기|소고기|돼지고기/, '🥩'],
+  [/닭고기|치킨/, '🍗'], [/생선/, '🐟'], [/새우/, '🦐'], [/계란/, '🥚'], [/고구마/, '🍠'], [/감자/, '🥔'],
+  [/과일/, '🍎'], [/딸기/, '🍓'], [/귤/, '🍊'], [/바나나/, '🍌'], [/수박/, '🍉'], [/포도/, '🍇'],
+  [/빵/, '🍞'], [/우유/, '🥛'], [/국수|우동/, '🍜'], [/카레/, '🍛'], [/떡/, '🍡'],
+  [/놀이터/, '🛝'], [/놀이|놀았|놀고|뛰어놀/, '🎈'], [/뛰|달리/, '🏃'],
+  [/노래/, '🎵'], [/음악/, '🎶'], [/춤/, '💃'], [/그림|그렸|그리는|그리기|미술|색칠/, '🎨'], [/만들|꾸미|공작/, '✂️'],
+  [/산책|나들이/, '🚶'], [/소풍/, '🧺'], [/견학/, '🚌'], [/낮잠/, '😴'],
+  [/감기|콧물|기침/, '🤧'], [/미열|발열|열이|열도/, '🌡️'], [/병원/, '🏥'], [/투약|약을/, '💊'],
+  [/친구/, '👫'], [/웃/, '😊'], [/행복/, '💛'], [/사랑/, '❤️']
+];
+var EMOJI_RE = /\p{Extended_Pictographic}/u;
+function emojiSentence(s){
+  if(!s || EMOJI_RE.test(s)) return s;
+  var best = null;
+  for(var i=0;i<EMOJI_MAP.length;i++){
+    var m = EMOJI_MAP[i][0].exec(s);
+    if(m && (best===null || m.index<best.idx)) best = { idx:m.index, len:m[0].length, e:EMOJI_MAP[i][1] };
+  }
+  if(!best) return s;
+  var end = best.idx + best.len;
+  while(end < s.length && !/[\s.,!?~…]/.test(s[end])) end++;
+  return s.slice(0,end) + best.e + s.slice(end);
+}
+function emojify(text){
+  return text.split('\n').map(function(line){
+    return line.split(/(?<=[.!?~…])\s+/).map(emojiSentence).join(' ');
+  }).join('\n');
+}
+
 function templateReplies(note, o){
   var n = o.child ? childRef(o.child) : '우리 아이';
   var ctx = { n:n, nT:(o.child ? n+'는' : '우리 아이는'), t:o.teacher || '선생님', food:'' };
+  var emo = function(s){ return o.emoji==='0' ? s : emojify(s); };
   var food = detectFood(note);
   if(food) ctx.food = eulReul(food) + ' ';
 
@@ -268,15 +306,15 @@ function templateReplies(note, o){
     var parts = [];
     for(var k=0;k<rot.length && parts.length<want;k++){
       var line = pick(rot[k].lines);
-      parts.push(fill(line, ctx).replace(/\s+/g,' ').trim());
+      parts.push(emo(fill(line, ctx).replace(/\s+/g,' ').trim()));
     }
     if(parts.length<want && found[0].key!=='generic'){
-      parts.push(fill(pick(GENERIC), ctx));
+      parts.push(emo(fill(pick(GENERIC), ctx)));
     }
-    var txt = fill(opens[i % opens.length], ctx);
+    var txt = emo(fill(opens[i % opens.length], ctx));
     if(parts.length) txt += '\n' + parts.join(' ');
     if(o.memo) txt += '\n' + o.memo.replace(/\s+$/,'');
-    txt += '\n' + fill(closes[i % closes.length], ctx);
+    txt += '\n' + emo(fill(closes[i % closes.length], ctx));
     out.push(txt);
   }
   return out;
@@ -301,7 +339,9 @@ function buildPrompt(note, o){
     '- 알림장에 나온 구체적인 내용(활동, 음식, 아이의 모습 등) 1~2가지를 자연스럽게 언급합니다.',
     '- 선생님의 정성과 수고에 대한 감사 표현을 넣습니다.',
     '- 알림장에 없는 사실, 아이의 병력·성격·가정 사정을 지어내지 않습니다.',
-    '- 이모지는 0~2개만, 과장되거나 낯간지러운 표현은 피합니다.',
+    o.emoji==='0'
+      ? '- 이모지는 쓰지 않고, 과장되거나 낯간지러운 표현은 피합니다.'
+      : '- 모든 문장마다 그 문장의 핵심 단어 바로 뒤에 어울리는 이모지를 1개씩 붙입니다. (예: "점심을🍚 맛있게 먹었다니 기뻐요.") 같은 이모지를 반복하지 말고, 낯간지러운 표현은 피합니다.',
     '- 3가지 답장은 첫 문장과 구성이 서로 달라야 합니다.',
     '- 오늘은 ' + days[d] + '요일입니다. 금요일이면 주말 인사를, 토·일이면 편안한 하루 인사를, 그 외에는 내일도 잘 부탁드린다는 식의 마무리를 사용하세요.',
     '',
@@ -409,7 +449,7 @@ function generate(){
   if(!note){ toast('선생님 알림장 내용을 먼저 붙여넣어 주세요'); $('note').focus(); return; }
   store('draft', $('note').value);
   var o = {
-    tone: state.tone, len: state.len,
+    tone: state.tone, len: state.len, emoji: state.emoji,
     child: load('child'), teacher: load('teacher'),
     apikey: load('apikey'), model: load('model'),
     memo: $('memo').value.trim()
@@ -483,9 +523,10 @@ if('serviceWorker' in navigator){
   $('teacher').value = load('teacher');
   $('apikey').value = load('apikey');
   $('model').value = load('model');
-  var t = load('tone'), l = load('len');
+  var t = load('tone'), l = load('len'), em = load('emoji');
   if(t) state.tone = t;
   if(l) state.len = l;
+  if(em==='0' || em==='1') state.emoji = em;
   syncChips();
   var dr = load('draft'); if(dr) $('note').value = dr;
   $('verText').textContent = '알림장 답장 도우미 v' + APP_VERSION;
